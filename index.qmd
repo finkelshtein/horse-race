@@ -1,0 +1,376 @@
+---
+title: "The Horse Race"
+format:
+  html:
+    css: horse-race.css
+    toc: false
+    page-layout: full
+---
+
+```{=html}
+<header class="race-header">
+  <p class="header-eyebrow">Probability &amp; Statistics</p>
+  <h1>The Horse Race</h1>
+  <p>
+    Roll two fair dice. The horse whose number matches the sum moves one step forward.
+    A race has <strong>100 rolls</strong>. The right-hand columns show the cumulative count and frequency
+    of each sum across <strong>all rolls since Reset</strong>.
+  </p>
+</header>
+
+<main class="card">
+  <section class="stats">
+    <div class="stat">
+      <div class="stat-label">Race #</div>
+      <div class="stat-val" id="stat-race">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Current race roll</div>
+      <div class="stat-val" id="stat-roll">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Total rolls</div>
+      <div class="stat-val" id="stat-total-rolls">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Last winner</div>
+      <div class="stat-val amber" id="stat-winner">—</div>
+    </div>
+  </section>
+
+  <div class="winner-banner" id="winner-banner">
+    🏆 <span id="winner-text">Horse 7 wins the race!</span>
+  </div>
+
+  <div class="roll-info" id="roll-info">
+    <span>Press <strong>Roll once</strong> or <strong>Run race</strong> to begin.</span>
+  </div>
+
+  <div class="track-head">
+    <span></span>
+    <span></span>
+    <span class="track-head-stat">Count</span>
+    <span class="track-head-stat">Freq.</span>
+  </div>
+
+  <section class="track" id="track"></section>
+
+  <section class="controls">
+    <button class="primary" id="btn-roll">Roll once</button>
+    <button id="btn-race">Run race (100 rolls)</button>
+    <button id="btn-many">Run 20 races</button>
+    <button class="danger" id="btn-reset">Reset</button>
+  </section>
+
+  <section class="speed-row">
+    <span>Speed:</span>
+    <input type="range" id="speed" min="1" max="5" value="3" step="1">
+    <span id="speed-label">medium</span>
+  </section>
+
+  <section class="prob-section">
+    <p class="prob-title">Theoretical probability of each dice sum</p>
+    <div class="prob-chips" id="prob-chips"></div>
+  </section>
+
+  <section class="history-section" id="history-section">
+    <p class="history-title">Race winners</p>
+    <div class="wins-chips" id="wins-chips"></div>
+  </section>
+</main>
+
+<footer class="race-footer">
+  Built for classroom use · Two fair dice · 100 rolls per race
+</footer>
+
+<script>
+const HORSES = Array.from({length: 11}, (_, i) => i + 2);
+const ROLLS_PER_RACE = 100;
+
+const BAR_COLORS = {
+  2:'#c0392b', 3:'#e67e22', 4:'#27ae60', 5:'#2980b9', 6:'#8e44ad',
+  7:'#3ddc97', 8:'#8e44ad', 9:'#2980b9', 10:'#27ae60', 11:'#e67e22', 12:'#c0392b'
+};
+const WINNER_COLOR = '#f0a500';
+const DICE_ICONS = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+const SPEED_LABELS = ['very slow','slow','medium','fast','very fast'];
+const SPEED_DELAYS = [650, 270, 110, 35, 6];
+
+let raceSteps = {};
+let totalCounts = {};
+let raceWins = {};
+let currentRaceRolls = 0;
+let totalRolls = 0;
+let totalRaces = 0;
+let animRunning = false;
+let animTimer = null;
+
+function waysForSum(n) {
+  let ways = 0;
+  for (let a = 1; a <= 6; a++) {
+    for (let b = 1; b <= 6; b++) {
+      if (a + b === n) ways++;
+    }
+  }
+  return ways;
+}
+
+function trueProb(n) {
+  return waysForSum(n) / 36;
+}
+
+function rollDie() {
+  return Math.floor(Math.random() * 6) + 1;
+}
+
+function getDelay() {
+  return SPEED_DELAYS[Number(document.getElementById('speed').value) - 1];
+}
+
+function init() {
+  clearTimeout(animTimer);
+  animRunning = false;
+  currentRaceRolls = 0;
+  totalRolls = 0;
+  totalRaces = 0;
+
+  HORSES.forEach(h => {
+    raceSteps[h] = 0;
+    totalCounts[h] = 0;
+    raceWins[h] = 0;
+  });
+
+  buildTrack();
+  buildProbChips();
+  updateTrack();
+  updateCumulativeStats();
+
+  document.getElementById('stat-race').textContent = '0';
+  document.getElementById('stat-roll').textContent = '0';
+  document.getElementById('stat-total-rolls').textContent = '0';
+  document.getElementById('stat-winner').textContent = '—';
+  document.getElementById('roll-info').innerHTML = 'Press <strong>Roll once</strong> or <strong>Run race</strong> to begin.';
+  document.getElementById('winner-banner').classList.remove('show');
+  document.getElementById('history-section').style.display = 'none';
+  document.getElementById('wins-chips').innerHTML = '';
+  setButtons(false);
+}
+
+function resetCurrentRaceOnly() {
+  HORSES.forEach(h => { raceSteps[h] = 0; });
+  currentRaceRolls = 0;
+  document.getElementById('stat-roll').textContent = '0';
+  document.getElementById('winner-banner').classList.remove('show');
+  updateTrack();
+}
+
+function buildTrack() {
+  const el = document.getElementById('track');
+  el.innerHTML = '';
+
+  HORSES.forEach(h => {
+    const lane = document.createElement('div');
+    lane.className = 'lane';
+    lane.innerHTML = `
+      <span class="lane-num${h === 7 ? ' seven' : ''}">${h}</span>
+      <div class="bar-wrap">
+        <div class="bar" id="bar-${h}" style="width:0%;background:${BAR_COLORS[h]}"></div>
+      </div>
+      <span class="lane-count${h === 7 ? ' seven' : ''}" id="count-${h}">0</span>
+      <span class="lane-freq${h === 7 ? ' seven' : ''}" id="freq-${h}">0.000</span>
+    `;
+    el.appendChild(lane);
+  });
+}
+
+function updateTrack() {
+  HORSES.forEach(h => {
+    const bar = document.getElementById('bar-' + h);
+    const pct = Math.min(100 * raceSteps[h] / ROLLS_PER_RACE, 100);
+    bar.style.width = pct + '%';
+    bar.style.background = BAR_COLORS[h];
+    bar.innerHTML = pct > 7 ? `<span class="bar-label">${raceSteps[h]}</span>` : '';
+  });
+}
+
+function updateCumulativeStats() {
+  HORSES.forEach(h => {
+    const countEl = document.getElementById('count-' + h);
+    const freqEl = document.getElementById('freq-' + h);
+    const count = totalCounts[h] || 0;
+    const freq = totalRolls === 0 ? 0 : count / totalRolls;
+    countEl.textContent = count;
+    freqEl.textContent = freq.toFixed(3);
+  });
+}
+
+function buildProbChips() {
+  const el = document.getElementById('prob-chips');
+  el.innerHTML = '';
+
+  HORSES.forEach(h => {
+    const chip = document.createElement('span');
+    chip.className = 'prob-chip' + (h === 7 ? ' seven' : '');
+    const ways = waysForSum(h);
+    chip.textContent = `${h}: ${ways}/36 = ${trueProb(h).toFixed(3)}`;
+    el.appendChild(chip);
+  });
+}
+
+function doRoll() {
+  const d1 = rollDie();
+  const d2 = rollDie();
+  const sum = d1 + d2;
+
+  raceSteps[sum]++;
+  totalCounts[sum]++;
+  currentRaceRolls++;
+  totalRolls++;
+
+  document.getElementById('stat-roll').textContent = currentRaceRolls;
+  document.getElementById('stat-total-rolls').textContent = totalRolls;
+  document.getElementById('roll-info').innerHTML =
+    `<span class="dice">${DICE_ICONS[d1-1]} ${DICE_ICONS[d2-1]}</span>
+     <span>= ${sum}</span>
+     <span class="sum-badge">Horse ${sum} moves!</span>`;
+
+  updateTrack();
+  updateCumulativeStats();
+}
+
+function getRaceWinner() {
+  const maxSteps = Math.max(...HORSES.map(h => raceSteps[h]));
+  const winners = HORSES.filter(h => raceSteps[h] === maxSteps);
+  return winners[Math.floor(Math.random() * winners.length)];
+}
+
+function recordWin(winner) {
+  totalRaces++;
+  raceWins[winner] = (raceWins[winner] || 0) + 1;
+
+  document.getElementById('stat-race').textContent = totalRaces;
+  document.getElementById('stat-winner').textContent = `🐴 ${winner}`;
+  document.getElementById('winner-banner').classList.add('show');
+  document.getElementById('winner-text').textContent =
+    `Horse ${winner} wins race #${totalRaces} after ${ROLLS_PER_RACE} rolls!`;
+
+  const chip = document.createElement('span');
+  chip.className = 'win-chip' + (winner === 7 ? ' seven' : '');
+  chip.textContent = `🐴${winner}`;
+  document.getElementById('wins-chips').appendChild(chip);
+  document.getElementById('history-section').style.display = '';
+}
+
+function setButtons(running) {
+  document.getElementById('btn-roll').disabled = running;
+  document.getElementById('btn-race').disabled = running;
+  document.getElementById('btn-many').disabled = running;
+}
+
+function finishRace(onDone) {
+  const winner = getRaceWinner();
+  recordWin(winner);
+  animRunning = false;
+  setButtons(false);
+  if (onDone) onDone();
+}
+
+function runOneRace(onDone, autoResetBeforeStart = true) {
+  if (autoResetBeforeStart && currentRaceRolls > 0) {
+    resetCurrentRaceOnly();
+  }
+
+  animRunning = true;
+  setButtons(true);
+
+  function step() {
+    if (currentRaceRolls >= ROLLS_PER_RACE) {
+      finishRace(onDone);
+      return;
+    }
+    doRoll();
+    animTimer = setTimeout(step, getDelay());
+  }
+
+  step();
+}
+
+function runManyRaces(n) {
+  if (n <= 0) {
+    animRunning = false;
+    setButtons(false);
+    return;
+  }
+
+  if (currentRaceRolls > 0) {
+    resetCurrentRaceOnly();
+  }
+
+  animRunning = true;
+  setButtons(true);
+
+  function runNext(remaining) {
+    if (remaining <= 0) {
+      animRunning = false;
+      setButtons(false);
+      return;
+    }
+
+    resetCurrentRaceOnly();
+
+    function step() {
+      if (currentRaceRolls >= ROLLS_PER_RACE) {
+        const winner = getRaceWinner();
+        recordWin(winner);
+        setTimeout(() => runNext(remaining - 1), Math.max(getDelay() * 3, 80));
+        return;
+      }
+      doRoll();
+      animTimer = setTimeout(step, getDelay());
+    }
+
+    step();
+  }
+
+  runNext(n);
+}
+
+document.getElementById('btn-roll').addEventListener('click', () => {
+  if (animRunning) return;
+
+  document.getElementById('winner-banner').classList.remove('show');
+
+  if (currentRaceRolls >= ROLLS_PER_RACE) {
+    resetCurrentRaceOnly();
+  }
+
+  doRoll();
+
+  if (currentRaceRolls >= ROLLS_PER_RACE) {
+    finishRace(null);
+  }
+});
+
+document.getElementById('btn-race').addEventListener('click', () => {
+  if (animRunning) return;
+  document.getElementById('winner-banner').classList.remove('show');
+  runOneRace(null, true);
+});
+
+document.getElementById('btn-many').addEventListener('click', () => {
+  if (animRunning) return;
+  document.getElementById('winner-banner').classList.remove('show');
+  runManyRaces(20);
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  init();
+});
+
+document.getElementById('speed').addEventListener('input', function() {
+  document.getElementById('speed-label').textContent = SPEED_LABELS[Number(this.value) - 1];
+});
+
+init();
+</script>
+```

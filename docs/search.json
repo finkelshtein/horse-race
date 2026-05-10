@@ -1,0 +1,9 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "The Horse Race",
+    "section": "",
+    "text": "Probability & Statistics\n  The Horse Race\n  \n    Roll two fair dice. The horse whose number matches the sum moves one step forward.\n    A race has 100 rolls. The right-hand columns show the cumulative count and frequency\n    of each sum across all rolls since Reset.\n  \n\n\n\n  \n    \n      Race #\n      0\n    \n    \n      Current race roll\n      0\n    \n    \n      Total rolls\n      0\n    \n    \n      Last winner\n      —\n    \n  \n\n  \n    🏆 Horse 7 wins the race!\n  \n\n  \n    Press Roll once or Run race to begin.\n  \n\n  \n    \n    \n    Count\n    Freq.\n  \n\n  \n\n  \n    Roll once\n    Run race (100 rolls)\n    Run 20 races\n    Reset\n  \n\n  \n    Speed:\n    \n    medium\n  \n\n  \n    Theoretical probability of each dice sum\n    \n  \n\n  \n    Race winners\n    \n  \n\n\n\n  Built for classroom use · Two fair dice · 100 rolls per race"
+  }
+]
